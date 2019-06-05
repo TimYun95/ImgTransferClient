@@ -85,6 +85,8 @@ namespace WinFormClient
         byte bufferReceivePackIndex = 0;
         List<byte[]> bufferReceivePackContent = new List<byte[]>(byte.MaxValue);
         List<byte> bufferReceivePackNum = new List<byte>(byte.MaxValue);
+
+        bool ifFindAddress = false;
         #endregion
 
         public Form1()
@@ -106,7 +108,7 @@ namespace WinFormClient
 
             // 获得当前client的IP地址
             NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
-            bool ifFindAddress = false;
+
             foreach (NetworkInterface adapter in adapters)
             {
                 if (adapter.Name == netAdapterName)
@@ -130,6 +132,10 @@ namespace WinFormClient
                     }
                 }
             }
+        }
+
+        private void Form1_Shown(object sender, EventArgs e)
+        {
             if (!ifFindAddress)
             {
                 this.Close();
@@ -461,20 +467,6 @@ namespace WinFormClient
             udpTransferSocket.Shutdown(SocketShutdown.Both);
             udpTransferSocket.Close();
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     }
 }

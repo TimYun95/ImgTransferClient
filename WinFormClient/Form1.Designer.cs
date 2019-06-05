@@ -77,6 +77,7 @@
             this.Controls.Add(this.IBShow);
             this.Name = "Form1";
             this.Text = "Form1";
+            this.Shown += new System.EventHandler(this.Form1_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.IBShow)).EndInit();
             this.ResumeLayout(false);
 
