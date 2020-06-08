@@ -32,7 +32,9 @@
             this.IBShow = new Emgu.CV.UI.ImageBox();
             this.beginBtn = new System.Windows.Forms.Button();
             this.stopBtn = new System.Windows.Forms.Button();
+            this.imageBox1 = new Emgu.CV.UI.ImageBox();
             ((System.ComponentModel.ISupportInitialize)(this.IBShow)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.imageBox1)).BeginInit();
             this.SuspendLayout();
             // 
             // IBShow
@@ -40,7 +42,7 @@
             this.IBShow.FunctionalMode = Emgu.CV.UI.ImageBox.FunctionalModeOption.Minimum;
             this.IBShow.Location = new System.Drawing.Point(12, 12);
             this.IBShow.Name = "IBShow";
-            this.IBShow.Size = new System.Drawing.Size(643, 497);
+            this.IBShow.Size = new System.Drawing.Size(643, 397);
             this.IBShow.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.IBShow.TabIndex = 4;
             this.IBShow.TabStop = false;
@@ -67,11 +69,22 @@
             this.stopBtn.UseVisualStyleBackColor = true;
             this.stopBtn.Click += new System.EventHandler(this.stopBtn_Click);
             // 
+            // imageBox1
+            // 
+            this.imageBox1.FunctionalMode = Emgu.CV.UI.ImageBox.FunctionalModeOption.Minimum;
+            this.imageBox1.Location = new System.Drawing.Point(12, 415);
+            this.imageBox1.Name = "imageBox1";
+            this.imageBox1.Size = new System.Drawing.Size(643, 488);
+            this.imageBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            this.imageBox1.TabIndex = 8;
+            this.imageBox1.TabStop = false;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(838, 521);
+            this.ClientSize = new System.Drawing.Size(1273, 954);
+            this.Controls.Add(this.imageBox1);
             this.Controls.Add(this.stopBtn);
             this.Controls.Add(this.beginBtn);
             this.Controls.Add(this.IBShow);
@@ -79,6 +92,7 @@
             this.Text = "Form1";
             this.Shown += new System.EventHandler(this.Form1_Shown);
             ((System.ComponentModel.ISupportInitialize)(this.IBShow)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.imageBox1)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -88,6 +102,7 @@
         private Emgu.CV.UI.ImageBox IBShow;
         private System.Windows.Forms.Button beginBtn;
         private System.Windows.Forms.Button stopBtn;
+        private Emgu.CV.UI.ImageBox imageBox1;
     }
 }
 

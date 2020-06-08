@@ -36,8 +36,8 @@ namespace WinFormClient
         }
 
         #region 静态字段
-        const bool ifAtSamePC = false;
-        const bool ifAtSameLAN = false;
+        const bool ifAtSamePC = true;
+        const bool ifAtSameLAN = true;
         const string netAdapterName = "WLAN 2";
 
         const string clientIPAtSamePC = "127.0.0.1";
@@ -54,7 +54,7 @@ namespace WinFormClient
         const int clientPortTCPAtWAN = 40005;
         const int clientPortUDPAtWAN = 40006;
         const string serverIPAtWAN = "202.120.48.24"; // 路由器的公网IP
-        
+
         const int serverPortTCPAtAll = 40005; // 端口转发应该设置同一端口
         const int serverPortUDPAtAll = 40006; //端口转发应该设置同一端口
 
@@ -64,7 +64,7 @@ namespace WinFormClient
         Socket tcpTransferSocket;
         bool ifTcpConnectionEstablished = false;
         const int tcpTransferSocketSendTimeOut = 500;
-        const int tcpTransferSocketInterval = 1000;
+        const int tcpTransferSocketInterval = 120;
         System.Timers.Timer tcpSendClocker = new System.Timers.Timer(tcpTransferSocketInterval);
         Task tcpTransferSendTask;
         CancellationTokenSource tcpTransferCancel;
@@ -98,13 +98,27 @@ namespace WinFormClient
             Logger.HistoryPrinting(Logger.Level.INFO, MethodBase.GetCurrentMethod().DeclaringType.FullName, "WinForm video client starts with successful checked.");
 
             // 装上TCP定时器
-            tcpSendClocker.AutoReset = true;
+            tcpSendClocker.AutoReset = false;
             tcpSendClocker.Elapsed += tcpSendClocker_Elapsed;
+            camera.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.Fps, 10);
+            camera.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameHeight, 1080);
+            camera.SetCaptureProperty(Emgu.CV.CvEnum.CapProp.FrameWidth, 1920);
+
+            tcpSendClocker.Start();
 
             // 获取RSA密钥
             RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(1024);
             publicKey = rsa.ToXmlString(false);
             privateKey = rsa.ToXmlString(true);
+
+            // 刷新公共密钥
+            using (AesCryptoServiceProvider tempAes = new AesCryptoServiceProvider())
+            {
+                tempAes.GenerateKey();
+                tempAes.GenerateIV();
+                commonKey = tempAes.Key;
+                commonIV = tempAes.IV;
+            }
 
             // 获得当前client的IP地址
             NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces();
@@ -136,11 +150,11 @@ namespace WinFormClient
 
         private void Form1_Shown(object sender, EventArgs e)
         {
-            if (!ifFindAddress)
-            {
-                this.Close();
-                return;
-            }
+            //if (!ifFindAddress)
+            //{
+            //    this.Close();
+            //    return;
+            //}
         }
 
         private void beginBtn_Click(object sender, EventArgs e)
@@ -438,12 +452,192 @@ namespace WinFormClient
             }
         }
 
+
+        private string remoteDevicePublicKey = null;
+        private const int remoteDevicePublicKeyLength = 1024;
+        Capture camera = new Capture(0);
+        List<long> time1 = new List<long>(), time2 = new List<long>(), time3 = new List<long>();
+        List<long> len1 = new List<long>(), len2 = new List<long>(), len3 = new List<long>();
         /// <summary>
         /// TCP传输心跳定时器
         /// </summary>
         private void tcpSendClocker_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
-            SendCmd(VideoTransferProtocolKey.PingSignal);
+            //SendCmd(VideoTransferProtocolKey.PingSignal);
+
+            remoteDevicePublicKey = publicKey;
+
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            sw.Start();
+            // 得到图像
+            Mat pic = new Mat();
+            camera.Retrieve(pic, 0);
+
+            // 得到图像压缩后的字节流
+            byte[] imgBytes;
+            Bitmap ImgBitmap = pic.ToImage<Bgr, byte>().Bitmap;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ImgBitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
+                imgBytes = ms.GetBuffer();
+            }
+            sw.Stop();
+            time1.Add(sw.ElapsedMilliseconds);
+            len1.Add(imgBytes.Length);
+            /*
+            sw.Restart();
+            // 利用公钥加密
+            int byteLength = imgBytes.Length;
+            int unitLength = remoteDevicePublicKeyLength / 8 - 11;
+            int intgePart = byteLength / unitLength;
+            int segmentNum = intgePart + 1;
+            int totalLength = segmentNum * (remoteDevicePublicKeyLength / 8);
+            List<byte> sendBytesList = new List<byte>(totalLength);
+            using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+            {
+                rsa.FromXmlString(remoteDevicePublicKey);
+                for (int i = 0; i < segmentNum - 1; ++i)
+                {
+                    IEnumerable<byte> buffer = imgBytes.Skip(i * unitLength).Take(unitLength);
+                    sendBytesList.AddRange(rsa.Encrypt(buffer.ToArray(), false));
+                }
+                IEnumerable<byte> finalBuffer = imgBytes.Skip((segmentNum - 1) * unitLength);
+                sendBytesList.AddRange(rsa.Encrypt(finalBuffer.ToArray(), false));
+            }
+
+            sw.Stop();
+            time2.Add(sw.ElapsedMilliseconds);
+
+            sw.Restart();
+            byte[] encryptedBytes = sendBytesList.ToArray();
+
+            int byteLength2 = encryptedBytes.Length;
+            int unitLength2 = keyLength / 8;
+
+            int segmentNum2 = byteLength2 / unitLength2;
+            List<byte> decryptedBytesList = new List<byte>(byteLength2);
+            using (RSACryptoServiceProvider rsa = new RSACryptoServiceProvider())
+            {
+                rsa.FromXmlString(privateKey);
+                for (int i = 0; i < segmentNum2; ++i)
+                {
+                    IEnumerable<byte> buffer = encryptedBytes.Skip(i * unitLength2).Take(unitLength2);
+                    decryptedBytesList.AddRange(rsa.Decrypt(buffer.ToArray(), false));
+                }
+            }
+
+            sw.Stop();
+            time3.Add(sw.ElapsedMilliseconds);
+            */
+            using (MemoryStream ms = new MemoryStream(imgBytes))
+            {
+                imageBox1.Image = new Image<Bgr, byte>((Bitmap)Image.FromStream(ms)); // Bitmap->Image
+            }
+
+            sw.Restart();
+            // 利用公钥加密
+            byte[] encryptedBytes = EncryptByAES(imgBytes);
+            sw.Stop();
+            time2.Add(sw.ElapsedMilliseconds);
+            len2.Add(encryptedBytes.Length);
+
+            sw.Restart();
+            byte[] decryptedBytes = DecryptByAES(encryptedBytes);
+            sw.Stop();
+            time3.Add(sw.ElapsedMilliseconds);
+            len3.Add(decryptedBytes.Length);
+
+            using (MemoryStream ms = new MemoryStream(decryptedBytes))
+            {
+                IBShow.Image = new Image<Bgr, byte>((Bitmap)Image.FromStream(ms)); // Bitmap->Image
+            }
+
+            tcpSendClocker.Start();
+        }
+
+        private byte[] commonKey = null;
+        private byte[] commonIV = null;
+        /// <summary>
+        /// AES加密数据
+        /// </summary>
+        /// <param name="nonEncryptedBytes">待加密字节流</param>
+        /// <returns>加密后的字节流</returns>
+        private byte[] EncryptByAES(byte[] nonEncryptedBytes)
+        {
+            if (Object.Equals(nonEncryptedBytes, null) || nonEncryptedBytes.Length < 1)
+            {
+                Logger.HistoryPrinting(Logger.Level.WARN, MethodBase.GetCurrentMethod().DeclaringType.FullName, "Datas for encrypting by AES is abnormal.");
+                return null; // 待加密数据异常
+            }
+            if (Object.Equals(commonIV, null) ||
+                Object.Equals(commonKey, null))
+            {
+                Logger.HistoryPrinting(Logger.Level.WARN, MethodBase.GetCurrentMethod().DeclaringType.FullName, "AES key has not been known yet.");
+                return null; // AES密钥和初始向量未知
+            }
+
+            string nonEncryptedString = Convert.ToBase64String(nonEncryptedBytes);
+
+            byte[] encryptedBytes = null;
+            using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
+            {
+                aes.Key = commonKey; aes.IV = commonIV;
+                ICryptoTransform encryptorByAES = aes.CreateEncryptor();
+
+                using (MemoryStream msEncrypt = new MemoryStream())
+                {
+                    using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptorByAES, CryptoStreamMode.Write))
+                    {
+                        using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
+                        {
+                            swEncrypt.Write(nonEncryptedString);
+                        }
+                        encryptedBytes = msEncrypt.ToArray();
+                    }
+                }
+            }
+
+            return encryptedBytes;
+        }
+
+        /// <summary>
+        /// AES解密数据
+        /// </summary>
+        /// <param name="encryptedBytes">待解密字节流</param>
+        /// <returns>解密后的字节流</returns>
+        private byte[] DecryptByAES(byte[] encryptedBytes)
+        {
+            if (Object.Equals(encryptedBytes, null) || encryptedBytes.Length < 1)
+            {
+                Logger.HistoryPrinting(Logger.Level.WARN, MethodBase.GetCurrentMethod().DeclaringType.FullName, "Datas for decrypting by AES is abnormal.");
+                return null; // 待解密数据异常
+            }
+            if (Object.Equals(commonIV, null) ||
+                Object.Equals(commonKey, null))
+            {
+                Logger.HistoryPrinting(Logger.Level.WARN, MethodBase.GetCurrentMethod().DeclaringType.FullName, "AES key has not been known yet.");
+                return null; // AES密钥和初始向量未知
+            }
+
+            byte[] decryptedBytes = null;
+            using (AesCryptoServiceProvider aes = new AesCryptoServiceProvider())
+            {
+                aes.Key = commonKey; aes.IV = commonIV;
+                ICryptoTransform decryptorByAES = aes.CreateDecryptor();
+
+                using (MemoryStream msDecrypt = new MemoryStream(encryptedBytes))
+                {
+                    using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptorByAES, CryptoStreamMode.Read))
+                    {
+                        using (StreamReader swDecrypt = new StreamReader(csDecrypt))
+                        {
+                            string decryptedString = swDecrypt.ReadToEnd();
+                            decryptedBytes = Convert.FromBase64String(decryptedString);
+                        }
+                    }
+                }
+            }
+            return decryptedBytes;
         }
 
         /// <summary>
